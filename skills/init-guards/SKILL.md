@@ -17,14 +17,22 @@ frame; this fills in **this project's** specifics — which is what carries the 
    It detects the stack and creates `.guardrails/`: `GUARDRAILS.md` (ledger), overlay
    stubs, `pre-commit`, and the stack lint fragment. It prints `{ stack, created, skipped }`.
 
-2. **Wire the lint gate** (ts/next only). Spread the fragment into the project's eslint
-   flat config, scoped to the source glob:
-   ```js
-   import guardrails from './.guardrails/guardrails.eslint.mjs' // ts-node
-   // nextjs: import both *.ts-node.* then *.nextjs.* and spread in that order
-   export default [ ...existing, ...guardrails ]
-   ```
-   Confirm `npx eslint` still runs clean on current code before committing the rule.
+2. **Wire the lint gate** — the fragment for the detected stack (see the printed
+   `next_steps`). Confirm the linter runs clean on current code before committing the rule.
+   - **ts-node / node**: spread `.guardrails/guardrails.eslint.mjs` into the eslint flat
+     config, scoped to the source glob:
+     ```js
+     import guardrails from './.guardrails/guardrails.eslint.mjs'
+     export default [ ...existing, ...guardrails ]
+     ```
+   - **Tailwind (any JS stack, incl. next/remix/nuxt/sveltekit)**: import both
+     `*.ts-node.*` then `*.tailwind.*` and spread in that order.
+   - **python**: merge `.guardrails/guardrails.ruff.toml` into `ruff.toml` / `[tool.ruff.lint]`.
+     Gate: `ruff check . && pytest -q`.
+   - **go**: merge `.guardrails/guardrails.golangci.yml` into `.golangci.yml`.
+     Gate: `golangci-lint run ./...`.
+   - **rust**: copy `guardrails.clippy.toml` to the crate root and paste
+     `guardrails-lints.rs` attrs into `main.rs`/`lib.rs`. Gate: `cargo clippy -- -D warnings && cargo test`.
 
 3. **Wire the pre-commit**. Point git at it and set the gate command:
    ```

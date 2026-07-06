@@ -41,11 +41,17 @@ function detect(projectDir) {
     const deps = Object.assign({}, pkg.dependencies, pkg.devDependencies);
     const hasTs = Boolean(deps.typescript) || exists(path.join(root, 'tsconfig.json'));
     if (deps.next) frameworks.push('nextjs');
+    // Meta-frameworks that share the ts-node gate (no Next-specific rules of their own).
+    if (deps['@remix-run/react'] || deps['@remix-run/node'] || deps['@remix-run/server-runtime']) frameworks.push('remix');
+    if (deps.nuxt || deps.nuxt3) frameworks.push('nuxt');
+    if (deps['@sveltejs/kit']) frameworks.push('sveltekit');
     if (deps.react) frameworks.push('react');
     if (deps.express) frameworks.push('express');
     if (deps.fastify) frameworks.push('fastify');
     if (deps['@trpc/server']) frameworks.push('trpc');
     if (deps.prisma || deps['@prisma/client']) frameworks.push('prisma');
+    // Tailwind's color-token gate applies to ANY Tailwind project, not just Next.
+    if (deps.tailwindcss) frameworks.push('tailwind');
 
     let stack = hasTs ? 'ts-node' : 'node';
     if (frameworks.includes('nextjs')) stack = 'nextjs';

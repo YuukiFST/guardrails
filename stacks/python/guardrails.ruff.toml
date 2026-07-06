@@ -1,0 +1,18 @@
+# guardrails · Python lint gate (ruff config fragment)
+#
+# Merge into your ruff.toml / pyproject [tool.ruff.lint], or use as-is. Turns recurring
+# ledger classes into "fails at write time" with ruff's native rules — installs nothing
+# beyond ruff. Wire the gate:  ruff check . && pytest -q
+#
+# Class map (see .guardrails/GUARDRAILS.md):
+#   S   flake8-bandit  → SQLi (S608), hardcoded secrets (S105/S106), assert in prod (S101)
+#   BLE flake8-blind-except → `except Exception:` swallows too much (#5)
+#   E722 bare-except   → `except:` hides every failure (#5)
+[lint]
+select = ["S", "BLE", "E722"]
+
+# Bandit's assert check is noise inside tests — allow asserts there only.
+[lint.per-file-ignores]
+"**/test_*.py" = ["S101"]
+"**/*_test.py" = ["S101"]
+"tests/**" = ["S101"]

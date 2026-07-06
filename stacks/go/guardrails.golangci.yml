@@ -1,0 +1,33 @@
+# guardrails · Go lint gate (golangci-lint fragment)
+#
+# Merge these linters into your .golangci.yml (or use as-is if you have none).
+# Same idea as the ts-node gate: turn recurring ledger classes from "caught by a
+# reviewer" into "fails at write time" using Go's native linters. Installs nothing
+# beyond golangci-lint itself.
+#
+# Wire it into the pre-commit GATE:  golangci-lint run ./...
+#
+# Class map (see .guardrails/GUARDRAILS.md):
+#   errcheck        → swallowed error (#5): an ignored `err` return is a silent failure
+#   gosec           → secrets/SQLi (#4/#8): G101 hardcoded creds, G201/G202 SQL string build
+#   rowserrcheck    → resource leak: sql.Rows.Err() not checked
+#   sqlclosecheck   → resource leak: sql.Rows/Stmt not closed
+#   noctx           → missing context: http/DB call without context (no timeout path)
+linters:
+  enable:
+    - errcheck
+    - gosec
+    - rowserrcheck
+    - sqlclosecheck
+    - noctx
+
+linters-settings:
+  errcheck:
+    # Also flag ignored type assertions and blank-assigned errors.
+    check-type-assertions: true
+    check-blank: true
+  gosec:
+    includes:
+      - G101 # hardcoded credentials
+      - G201 # SQL string format
+      - G202 # SQL string concatenation

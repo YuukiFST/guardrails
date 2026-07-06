@@ -108,16 +108,34 @@ function main() {
     writeIfAbsent(path.join(dir, name), content, created, skipped);
   }
 
-  // Stack lint fragment (ts/next only; other stacks scaffold ledger + pre-commit only).
-  if (info.stack === 'ts-node' || info.stack === 'node') {
-    copyIfAbsent(path.join(PLUGIN_ROOT, 'stacks', 'ts-node', 'guardrails.eslint.mjs'), path.join(dir, 'guardrails.eslint.mjs'), created, skipped);
-  } else if (info.stack === 'nextjs') {
-    // ship both fragments; the project spreads ts-node then nextjs
+  // Stack lint fragment. The "nextjs" fragment is really a Tailwind color-token gate —
+  // ship it for any Tailwind project, not just Next.
+  const nextSteps = [];
+  const isJs = info.stack === 'ts-node' || info.stack === 'node' || info.stack === 'nextjs';
+  const hasTailwind = info.stack === 'nextjs' || (info.frameworks || []).includes('tailwind');
+  if (isJs && hasTailwind) {
+    // ship both fragments; the project spreads ts-node then tailwind
     copyIfAbsent(path.join(PLUGIN_ROOT, 'stacks', 'ts-node', 'guardrails.eslint.mjs'), path.join(dir, 'guardrails.ts-node.eslint.mjs'), created, skipped);
-    copyIfAbsent(path.join(PLUGIN_ROOT, 'stacks', 'nextjs', 'guardrails.eslint.mjs'), path.join(dir, 'guardrails.nextjs.eslint.mjs'), created, skipped);
+    copyIfAbsent(path.join(PLUGIN_ROOT, 'stacks', 'nextjs', 'guardrails.eslint.mjs'), path.join(dir, 'guardrails.tailwind.eslint.mjs'), created, skipped);
+    nextSteps.push('Spread the eslint fragments into your flat config: ...guardrailsTsNode then ...guardrailsTailwind. Confirm `npx eslint` is clean before committing.');
+  } else if (isJs) {
+    copyIfAbsent(path.join(PLUGIN_ROOT, 'stacks', 'ts-node', 'guardrails.eslint.mjs'), path.join(dir, 'guardrails.eslint.mjs'), created, skipped);
+    nextSteps.push('Spread .guardrails/guardrails.eslint.mjs into your flat config. Confirm `npx eslint` is clean before committing.');
+  } else if (info.stack === 'python') {
+    copyIfAbsent(path.join(PLUGIN_ROOT, 'stacks', 'python', 'guardrails.ruff.toml'), path.join(dir, 'guardrails.ruff.toml'), created, skipped);
+    nextSteps.push('Merge .guardrails/guardrails.ruff.toml into your ruff config (ruff.toml or [tool.ruff.lint]). Gate: `ruff check . && pytest -q`.');
+  } else if (info.stack === 'go') {
+    copyIfAbsent(path.join(PLUGIN_ROOT, 'stacks', 'go', 'guardrails.golangci.yml'), path.join(dir, 'guardrails.golangci.yml'), created, skipped);
+    nextSteps.push('Merge .guardrails/guardrails.golangci.yml into your .golangci.yml. Gate: `golangci-lint run ./...`.');
+  } else if (info.stack === 'rust') {
+    copyIfAbsent(path.join(PLUGIN_ROOT, 'stacks', 'rust', 'guardrails.clippy.toml'), path.join(dir, 'guardrails.clippy.toml'), created, skipped);
+    copyIfAbsent(path.join(PLUGIN_ROOT, 'stacks', 'rust', 'guardrails-lints.rs'), path.join(dir, 'guardrails-lints.rs'), created, skipped);
+    nextSteps.push('Copy the clippy.toml to your crate root and paste guardrails-lints.rs attrs into main.rs/lib.rs. Gate: `cargo clippy -- -D warnings && cargo test`.');
+  } else {
+    nextSteps.push('Generic stack: no lint fragment. Set GATE_DEFAULT in .guardrails/pre-commit to your check command.');
   }
 
-  process.stdout.write(JSON.stringify({ stack: info.stack, frameworks: info.frameworks, created, skipped }, null, 2) + '\n');
+  process.stdout.write(JSON.stringify({ stack: info.stack, frameworks: info.frameworks, created, skipped, next_steps: nextSteps }, null, 2) + '\n');
 }
 
 main();

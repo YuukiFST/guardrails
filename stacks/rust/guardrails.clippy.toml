@@ -1,0 +1,13 @@
+# guardrails · Rust lint gate (clippy config)
+#
+# Rust's type system already eliminates whole ledger classes for free (null deref,
+# use-after-free, data races on shared mutable state). What remains is mostly the
+# silent-panic class and SQLi via string-built queries. This config + the lint attrs
+# in guardrails-lints.rs below cover the remainder.
+#
+# clippy.toml only holds thresholds; the actual deny-lints go as attributes in your
+# crate root (see guardrails-lints.rs). Wire the gate:
+#   cargo clippy --all-targets -- -D warnings && cargo test
+
+# Fail on large error enums / stack-copied results that hide cost (tune to taste).
+too-many-arguments-threshold = 8
