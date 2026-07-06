@@ -57,6 +57,7 @@ const GATE_DEFAULTS = {
   python: 'ruff check . && pytest -q',
   go: 'go vet ./... && go test ./...',
   rust: 'cargo clippy -- -D warnings && cargo test',
+  zig: 'zig fmt --check . && zig build test',
   generic: '',
 };
 
@@ -104,6 +105,9 @@ function main() {
 
   copyIfAbsent(path.join(PLUGIN_ROOT, 'templates', 'GUARDRAILS.md'), path.join(dir, 'GUARDRAILS.md'), created, skipped);
   writePreCommit(path.join(PLUGIN_ROOT, 'templates', 'pre-commit'), path.join(dir, 'pre-commit'), info.stack, created, skipped);
+  // Repo-wide pre-commit checks — copied in so .guardrails/pre-commit can call it by a
+  // repo-root-relative path regardless of how the hook is wired (hooksPath or .git/hooks copy).
+  copyIfAbsent(path.join(PLUGIN_ROOT, 'hooks', 'repo-checks.js'), path.join(dir, 'repo-checks.js'), created, skipped);
   for (const [name, content] of Object.entries(OVERLAY_STUBS)) {
     writeIfAbsent(path.join(dir, name), content, created, skipped);
   }
@@ -131,6 +135,9 @@ function main() {
     copyIfAbsent(path.join(PLUGIN_ROOT, 'stacks', 'rust', 'guardrails.clippy.toml'), path.join(dir, 'guardrails.clippy.toml'), created, skipped);
     copyIfAbsent(path.join(PLUGIN_ROOT, 'stacks', 'rust', 'guardrails-lints.rs'), path.join(dir, 'guardrails-lints.rs'), created, skipped);
     nextSteps.push('Copy the clippy.toml to your crate root and paste guardrails-lints.rs attrs into main.rs/lib.rs. Gate: `cargo clippy -- -D warnings && cargo test`.');
+  } else if (info.stack === 'zig') {
+    copyIfAbsent(path.join(PLUGIN_ROOT, 'stacks', 'zig', 'guardrails-zig.md'), path.join(dir, 'guardrails-zig.md'), created, skipped);
+    nextSteps.push('No third-party Zig linter (zlint not installed). Read .guardrails/guardrails-zig.md and add its grep-gate line to .guardrails/pre-commit after the GATE (blocks `catch unreachable`/`catch {}` in non-test .zig; escape a legit case with `// guardrails-ok: <why>`). Gate: `zig fmt --check . && zig build test`.');
   } else {
     nextSteps.push('Generic stack: no lint fragment. Set GATE_DEFAULT in .guardrails/pre-commit to your check command.');
   }

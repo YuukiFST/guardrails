@@ -19,6 +19,13 @@ else
   echo "guardrails: GATE not configured — set GUARDRAILS_GATE or edit GATE_DEFAULT in .guardrails/pre-commit (running secret scan only)" >&2
 fi
 
+# Repo-wide checks the write-time hook can't see (cyclic import & swallowed catch BLOCK;
+# large file / unbounded query / duplicate helper WARN). Blocks the commit on exit 1.
+# Path is relative to the repo root — git runs hooks with CWD at the top level.
+if [ -f .guardrails/repo-checks.js ] && command -v node >/dev/null 2>&1; then
+  node .guardrails/repo-checks.js
+fi
+
 # Secret scan on staged content (best-effort — skips if gitleaks absent).
 if command -v gitleaks >/dev/null 2>&1; then
   gitleaks protect --staged --redact --no-banner
