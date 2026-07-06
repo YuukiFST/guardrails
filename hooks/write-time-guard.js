@@ -28,7 +28,7 @@ const PLUGIN_ROOT = path.resolve(__dirname, '..');
 // Server-side language extensions — the set eligible for PATH-based backend/data
 // classification (an Edit often ships only the changed snippet, so the path is a
 // more reliable signal than sniffing the fragment for a keyword).
-const SERVER_LANG_EXT = /\.(ts|js|mjs|cjs|py|go|rs|rb|java|kt|php|ex|exs|cs)$/;
+const SERVER_LANG_EXT = /\.(ts|js|mjs|cjs|py|go|rs|rb|java|kt|php|ex|exs|cs|zig)$/;
 
 /** Map an edited file to a rule area (or null). Path first, then content sniff. */
 function areaFor(filePath, content) {
@@ -40,7 +40,7 @@ function areaFor(filePath, content) {
 
   // Tests (JS/TS/Python/Go).
   if (/\.(test|spec)\.[jt]sx?$/.test(p) || /(^|\/)test_[^/]+\.py$/.test(p) || /_test\.py$/.test(p) ||
-      /_test\.go$/.test(p)) {
+      /_test\.go$/.test(p) || /_test\.zig$/.test(p)) {
     return 'tests';
   }
 
@@ -73,7 +73,8 @@ function areaFor(filePath, content) {
     // HTTP handler / route → backend-api. Includes Rust (axum/actix) and Go (net/http/gin/echo/fiber/chi).
     if (/(router|procedure|@app\.(route|get|post)|app\.(get|post|put|delete)\(|fastapi|express|http\.HandlerFunc|def handler|route\.(get|post))/i.test(c) ||
         /(axum::|actix_web|Router::new|#\[(get|post|put|delete)|async fn .*(Request|Response))/.test(c) ||
-        /(http\.ResponseWriter|gin\.Context|echo\.Context|fiber\.Ctx|mux\.|chi\.)/.test(c)) {
+        /(http\.ResponseWriter|gin\.Context|echo\.Context|fiber\.Ctx|mux\.|chi\.)/.test(c) ||
+        /(std\.http\.Server|httpz|zap\.|\.listen\()/.test(c)) {
       return 'backend-api';
     }
   }
@@ -83,7 +84,7 @@ function areaFor(filePath, content) {
 // Cross-cutting digests without a natural "file area" — triggered by CONTENT, not path.
 // error-handling and performance apply to any code file; they inject in ADDITION to the
 // primary area (each still deduped to 1x/session in main).
-const CODE_EXT = /\.(ts|tsx|js|jsx|mjs|cjs|py|go|rs|rb|java|kt|php|ex|exs|cs|vue|svelte)$/;
+const CODE_EXT = /\.(ts|tsx|js|jsx|mjs|cjs|py|go|rs|rb|java|kt|php|ex|exs|cs|vue|svelte|zig)$/;
 
 /** Content-triggered extra areas (error-handling / performance). Returns [] or a subset. */
 function contentAreas(filePath, content) {
@@ -92,11 +93,16 @@ function contentAreas(filePath, content) {
   if (/(^|\/)(node_modules|dist|build|\.next|vendor|__generated__)\//.test(p)) return [];
   const c = String(content || '');
   const out = [];
-  if (/\b(catch|except|rescue)\b|Result<|if err != nil/.test(c)) out.push('error-handling');
+  if (/\b(catch|except|rescue|errdefer)\b|Result<|if err != nil/.test(c)) out.push('error-handling');
   // Loop body doing I/O (await/fetch/query per iteration) or a spin loop.
   if (/(for\b|\.forEach\(|\.map\()[\s\S]{0,120}?\b(await|fetch|query)\b/.test(c) ||
       /while\s*\(\s*true\s*\)/.test(c)) {
     out.push('performance');
+  }
+  // Concurrency primitives → race / idempotency / lock-order / TOCTOU digest.
+  // Case-sensitive on purpose: `/Lock\b/i` would match "block"/"clock" — false triggers.
+  if (/Promise\.all|go func|tokio::spawn|std\.Thread|threading\.|\bThread\b|\bmutex\b|\bMutex\b|sync\.(Mutex|RWMutex|WaitGroup)|\.lock\(\)|\bLock\b/.test(c)) {
+    out.push('concurrency');
   }
   return out;
 }

@@ -65,6 +65,9 @@ function detect(projectDir) {
 
   if (exists(path.join(root, 'go.mod'))) return { stack: 'go', frameworks, markers: ['go.mod'], hasTypeScript: false };
   if (exists(path.join(root, 'Cargo.toml'))) return { stack: 'rust', frameworks, markers: ['Cargo.toml'], hasTypeScript: false };
+  if (exists(path.join(root, 'build.zig')) || exists(path.join(root, 'build.zig.zon'))) {
+    return { stack: 'zig', frameworks, markers: ['build.zig'], hasTypeScript: false };
+  }
 
   return { stack: 'generic', frameworks, markers, hasTypeScript: false };
 }

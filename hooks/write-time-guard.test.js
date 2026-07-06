@@ -98,6 +98,24 @@ test('MultiEdit backend classifies via concatenated content', () => {
   assert.strictEqual(areaFor('x.go', readContent(payload, 'x.go')), 'backend-api');
 });
 
+// --- areaFor: Zig ---
+
+test('Zig httpz handler → backend-api', () => {
+  assert.strictEqual(areaFor('src/main.zig', 'var server = httpz.Server().init(alloc);'), 'backend-api');
+});
+
+test('Zig std.http.Server → backend-api', () => {
+  assert.strictEqual(areaFor('server.zig', 'var s = std.http.Server.init(opts);'), 'backend-api');
+});
+
+test('Zig _test.zig → tests', () => {
+  assert.strictEqual(areaFor('src/thing_test.zig', 'test "x" { }'), 'tests');
+});
+
+test('plain Zig with no keyword → null', () => {
+  assert.strictEqual(areaFor('src/util.zig', 'pub fn add(a: u8, b: u8) u8 { return a + b; }'), null);
+});
+
 // --- contentAreas: cross-cutting error-handling / performance triggers ---
 
 test('catch block triggers error-handling', () => {
@@ -115,6 +133,30 @@ test('await inside for loop triggers performance', () => {
 
 test('while(true) triggers performance', () => {
   assert.ok(contentAreas('src/x.ts', 'while (true) { tick(); }').includes('performance'));
+});
+
+test('zig errdefer triggers error-handling', () => {
+  assert.ok(contentAreas('src/x.zig', 'errdefer alloc.free(buf);').includes('error-handling'));
+});
+
+test('Promise.all triggers concurrency', () => {
+  assert.ok(contentAreas('src/x.ts', 'await Promise.all(tasks);').includes('concurrency'));
+});
+
+test('go func triggers concurrency', () => {
+  assert.ok(contentAreas('x.go', 'go func() { work() }()').includes('concurrency'));
+});
+
+test('go sync.Mutex triggers concurrency', () => {
+  assert.ok(contentAreas('x.go', 'var mu sync.Mutex').includes('concurrency'));
+});
+
+test('zig std.Thread triggers concurrency', () => {
+  assert.ok(contentAreas('x.zig', 'const t = try std.Thread.spawn(.{}, run, .{});').includes('concurrency'));
+});
+
+test('concurrency trigger does NOT false-fire on "block"/"clock"', () => {
+  assert.ok(!contentAreas('src/x.ts', 'const block = clock() + unblock();').includes('concurrency'));
 });
 
 test('contentAreas ignores non-code files', () => {
