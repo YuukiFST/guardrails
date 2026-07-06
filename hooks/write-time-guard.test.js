@@ -6,7 +6,7 @@
 
 const { test } = require('node:test');
 const assert = require('node:assert');
-const { areaFor, readContent } = require('./write-time-guard.js');
+const { areaFor, contentAreas, allAreasFor, readContent } = require('./write-time-guard.js');
 
 // --- areaFor: PATH-based backend/data (snippet has no keyword) ---
 
@@ -96,4 +96,42 @@ test('readContent prefers content, then new_string', () => {
 test('MultiEdit backend classifies via concatenated content', () => {
   const payload = { tool_input: { file_path: 'x.go', edits: [{ new_string: 'func h(c *gin.Context){}' }] } };
   assert.strictEqual(areaFor('x.go', readContent(payload, 'x.go')), 'backend-api');
+});
+
+// --- contentAreas: cross-cutting error-handling / performance triggers ---
+
+test('catch block triggers error-handling', () => {
+  assert.deepStrictEqual(contentAreas('src/x.ts', 'try { a() } catch (e) { throw e }'), ['error-handling']);
+});
+
+test('go `if err != nil` triggers error-handling', () => {
+  assert.ok(contentAreas('x.go', 'if err != nil { return err }').includes('error-handling'));
+});
+
+test('await inside for loop triggers performance', () => {
+  const c = 'for (const id of ids) { await fetch(id); }';
+  assert.ok(contentAreas('src/x.ts', c).includes('performance'));
+});
+
+test('while(true) triggers performance', () => {
+  assert.ok(contentAreas('src/x.ts', 'while (true) { tick(); }').includes('performance'));
+});
+
+test('contentAreas ignores non-code files', () => {
+  assert.deepStrictEqual(contentAreas('README.md', 'catch me'), []);
+});
+
+test('contentAreas ignores vendored code', () => {
+  assert.deepStrictEqual(contentAreas('node_modules/x/i.js', 'catch (e) {}'), []);
+});
+
+// --- allAreasFor: primary + extras, deduped ---
+
+test('backend service with a catch → both backend-api and error-handling', () => {
+  const areas = allAreasFor('src/server/services/x.ts', 'export function f(){ try{a()}catch(e){log(e)} }');
+  assert.deepStrictEqual(areas, ['backend-api', 'error-handling']);
+});
+
+test('plain util with no triggers → empty', () => {
+  assert.deepStrictEqual(allAreasFor('src/lib/add.ts', 'export const add = (a,b)=>a+b;'), []);
 });

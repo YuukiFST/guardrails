@@ -80,6 +80,37 @@ function areaFor(filePath, content) {
   return null;
 }
 
+// Cross-cutting digests without a natural "file area" — triggered by CONTENT, not path.
+// error-handling and performance apply to any code file; they inject in ADDITION to the
+// primary area (each still deduped to 1x/session in main).
+const CODE_EXT = /\.(ts|tsx|js|jsx|mjs|cjs|py|go|rs|rb|java|kt|php|ex|exs|cs|vue|svelte)$/;
+
+/** Content-triggered extra areas (error-handling / performance). Returns [] or a subset. */
+function contentAreas(filePath, content) {
+  const p = String(filePath || '').replace(/\\/g, '/');
+  if (!p || !CODE_EXT.test(p)) return [];
+  if (/(^|\/)(node_modules|dist|build|\.next|vendor|__generated__)\//.test(p)) return [];
+  const c = String(content || '');
+  const out = [];
+  if (/\b(catch|except|rescue)\b|Result<|if err != nil/.test(c)) out.push('error-handling');
+  // Loop body doing I/O (await/fetch/query per iteration) or a spin loop.
+  if (/(for\b|\.forEach\(|\.map\()[\s\S]{0,120}?\b(await|fetch|query)\b/.test(c) ||
+      /while\s*\(\s*true\s*\)/.test(c)) {
+    out.push('performance');
+  }
+  return out;
+}
+
+/** All areas to inject for an edit: the primary area plus any content-triggered extras. */
+function allAreasFor(filePath, content) {
+  const primary = areaFor(filePath, content);
+  const areas = primary ? [primary] : [];
+  for (const a of contentAreas(filePath, content)) {
+    if (!areas.includes(a)) areas.push(a);
+  }
+  return areas;
+}
+
 /**
  * Best-effort read of the just-written content for the sniff.
  * MultiEdit ships `edits[]` (each with new_string) instead of a single `new_string`.
@@ -130,37 +161,46 @@ function main() {
     const payload = JSON.parse(readStdin() || '{}');
     const filePath = payload && payload.tool_input && payload.tool_input.file_path;
     const projectDir = String((payload && payload.cwd) || process.cwd());
-    const area = areaFor(filePath, readContent(payload, filePath));
+    const areas = allAreasFor(filePath, readContent(payload, filePath));
 
-    if (area) {
-      const digest = digestFor(area, projectDir);
-      if (digest) {
-        // Dedupe per session: 1 injection per area. State in temp — I/O failure here
-        // degrades to "inject again", never to "break the hook".
-        const sessionId = String((payload && payload.session_id) || 'nosession').replace(/[^\w-]/g, '');
-        const stateFile = path.join(os.tmpdir(), `guardrails-write-time-${sessionId}.json`);
-        let seen = [];
+    if (areas.length) {
+      // Dedupe per session: each area injects at most once. State in temp — I/O failure
+      // here degrades to "inject again", never to "break the hook".
+      const sessionId = String((payload && payload.session_id) || 'nosession').replace(/[^\w-]/g, '');
+      const stateFile = path.join(os.tmpdir(), `guardrails-write-time-${sessionId}.json`);
+      let seen = [];
+      try {
+        seen = JSON.parse(fs.readFileSync(stateFile, 'utf8'));
+        if (!Array.isArray(seen)) seen = [];
+      } catch {
+        seen = [];
+      }
+
+      const digests = [];
+      const freshlySeen = [];
+      for (const area of areas) {
+        if (seen.includes(area) || freshlySeen.includes(area)) continue;
+        const digest = digestFor(area, projectDir);
+        if (digest) {
+          digests.push(digest);
+          freshlySeen.push(area);
+        }
+      }
+
+      if (digests.length) {
         try {
-          seen = JSON.parse(fs.readFileSync(stateFile, 'utf8'));
-          if (!Array.isArray(seen)) seen = [];
+          fs.writeFileSync(stateFile, JSON.stringify([...seen, ...freshlySeen]));
         } catch {
-          seen = [];
+          // best-effort
         }
-        if (!seen.includes(area)) {
-          try {
-            fs.writeFileSync(stateFile, JSON.stringify([...seen, area]));
-          } catch {
-            // best-effort
-          }
-          process.stdout.write(
-            JSON.stringify({
-              hookSpecificOutput: {
-                hookEventName: 'PostToolUse',
-                additionalContext: digest,
-              },
-            }),
-          );
-        }
+        process.stdout.write(
+          JSON.stringify({
+            hookSpecificOutput: {
+              hookEventName: 'PostToolUse',
+              additionalContext: digests.join('\n\n---\n\n'),
+            },
+          }),
+        );
       }
     }
   } catch {
@@ -170,7 +210,7 @@ function main() {
 }
 
 // Exported for tests; auto-run only when invoked directly as the hook.
-module.exports = { areaFor, readContent, digestFor };
+module.exports = { areaFor, contentAreas, allAreasFor, readContent, digestFor };
 
 if (require.main === module) {
   main();

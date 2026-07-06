@@ -25,6 +25,7 @@ const BASE = [
   '• Fix the CLASS, not the instance: grep siblings of the same pattern → fix all → strengthen the guard',
   '   (reviewer → test → lint) → record the line in the ledger, same commit.',
   '• Every incident (prod error · data drift · owner course-correction) becomes a permanent sensor (test + ledger line).',
+  '• New module / extract / split: deep modules (small interface, real implementation), deletion test, no cycles — see rules/architecture.md (skill design-module).',
 ].join('\n');
 
 function readStdin() {
