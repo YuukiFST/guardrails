@@ -11,6 +11,12 @@ project overlay (.guardrails/backend-api.md) names your real helpers.
   Bad: `create({ ...body })`. Good: `create({ title: body.title, ownerId: ctx.userId })`.
 • Validate every external input at the trust boundary — parse with a schema, reject
   unknown/oversized; unvalidated input is the root of injection & corruption.
+• The web-input attack class — any input that becomes a URL, path, redirect, XML, or
+  deserialized object is a hole until proven safe: SSRF (fetch to a user URL → allowlist host,
+  block internal IPs), path traversal (`../` → resolve + confine under a base dir), open redirect
+  (validate against an allowlist), XXE (disable external entities), unsafe deserialization (no
+  pickle/native deserialize of untrusted bytes), upload (verify type+size, never trust filename),
+  JWT `alg:none`/algorithm-confusion (pin the algorithm), user-enumeration timing (uniform response).
 • Parameterized queries only — never build SQL by string concat; that is SQLi.
   Bad: `"WHERE name='"+n+"'"`. Good: parameter binding / ORM.
 • No swallowed errors — a bare catch that returns null hides real failures.
