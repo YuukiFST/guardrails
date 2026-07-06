@@ -25,7 +25,12 @@ const path = require('node:path');
 
 const PLUGIN_ROOT = path.resolve(__dirname, '..');
 
-/** Map an edited file to a rule area (or null). Extension first, then content sniff. */
+// Server-side language extensions — the set eligible for PATH-based backend/data
+// classification (an Edit often ships only the changed snippet, so the path is a
+// more reliable signal than sniffing the fragment for a keyword).
+const SERVER_LANG_EXT = /\.(ts|js|mjs|cjs|py|go|rs|rb|java|kt|php|ex|exs|cs)$/;
+
+/** Map an edited file to a rule area (or null). Path first, then content sniff. */
 function areaFor(filePath, content) {
   const p = String(filePath || '').replace(/\\/g, '/');
   if (!p) return null;
@@ -33,8 +38,9 @@ function areaFor(filePath, content) {
   // Vendored / generated — never nag.
   if (/(^|\/)(node_modules|dist|build|\.next|vendor|__generated__)\//.test(p)) return null;
 
-  // Tests (JS/TS/Python).
-  if (/\.(test|spec)\.[jt]sx?$/.test(p) || /(^|\/)test_[^/]+\.py$/.test(p) || /_test\.py$/.test(p)) {
+  // Tests (JS/TS/Python/Go).
+  if (/\.(test|spec)\.[jt]sx?$/.test(p) || /(^|\/)test_[^/]+\.py$/.test(p) || /_test\.py$/.test(p) ||
+      /_test\.go$/.test(p)) {
     return 'tests';
   }
 
@@ -42,28 +48,51 @@ function areaFor(filePath, content) {
   if (/schema\.prisma$/.test(p) || /(^|\/)migrations?\//.test(p)) return 'schema';
   if (/\.sql$/.test(p)) return 'schema';
 
-  // Frontend UI (skip shadcn/ui primitives).
+  // Frontend UI: components + stylesheets (skip shadcn/ui primitives).
   if (/\.(tsx|jsx|vue|svelte)$/.test(p) && !/(^|\/)components\/ui\//.test(p)) return 'frontend-ui';
+  if (/\.(css|scss|sass|less)$/.test(p)) return 'frontend-ui';
 
-  // Backend / data — content sniff on server-ish source files.
-  if (/\.(ts|js|mjs|cjs|py|go|rb|java|rs)$/.test(p)) {
+  // PATH-based backend/data classification (before content sniff): a server-lang file
+  // living in a data/api directory classifies even when the edited snippet has no keyword.
+  if (SERVER_LANG_EXT.test(p)) {
+    if (/(^|\/)(models?|repositor(y|ies)|queries|dao|db)(\/|$)/.test(p)) return 'data-query';
+    if (/(^|\/)(server|api|routes?|handlers?|controllers?|services?|middleware)(\/|$)/.test(p)) {
+      return 'backend-api';
+    }
+  }
+
+  // Content sniff — fallback when the path doesn't decide.
+  if (SERVER_LANG_EXT.test(p)) {
     const c = String(content || '');
+    // SQL / ORM data access → data-query. Includes Rust (sqlx/diesel/sea_orm) and Go (gorm/sqlx).
     if (/\b(SELECT|INSERT|UPDATE|DELETE)\b/i.test(c) ||
-        /(prisma\.|\.findMany\(|\.query\(|session\.query|db\.|repository\.|\.aggregate\()/.test(c)) {
+        /(prisma\.|\.findMany\(|\.query\(|session\.query|db\.|repository\.|\.aggregate\()/.test(c) ||
+        /(sqlx::|diesel::|sea_orm|database\/sql|sql\.DB|gorm\.|sqlx\.)/.test(c)) {
       return 'data-query';
     }
-    if (/(router|procedure|@app\.(route|get|post)|app\.(get|post|put|delete)\(|fastapi|express|http\.HandlerFunc|def handler|route\.(get|post))/i.test(c)) {
+    // HTTP handler / route → backend-api. Includes Rust (axum/actix) and Go (net/http/gin/echo/fiber/chi).
+    if (/(router|procedure|@app\.(route|get|post)|app\.(get|post|put|delete)\(|fastapi|express|http\.HandlerFunc|def handler|route\.(get|post))/i.test(c) ||
+        /(axum::|actix_web|Router::new|#\[(get|post|put|delete)|async fn .*(Request|Response))/.test(c) ||
+        /(http\.ResponseWriter|gin\.Context|echo\.Context|fiber\.Ctx|mux\.|chi\.)/.test(c)) {
       return 'backend-api';
     }
   }
   return null;
 }
 
-/** Best-effort read of the just-written file content (for the content sniff). */
+/**
+ * Best-effort read of the just-written content for the sniff.
+ * MultiEdit ships `edits[]` (each with new_string) instead of a single `new_string`.
+ * The 20KB cap is a safety bound only — with PATH-based classification in front, a
+ * keyword past 20KB no longer decides the common case.
+ */
 function readContent(payload, filePath) {
   const ti = payload && payload.tool_input;
   if (ti && typeof ti.content === 'string') return ti.content;
   if (ti && typeof ti.new_string === 'string') return ti.new_string;
+  if (ti && Array.isArray(ti.edits)) {
+    return ti.edits.map((e) => (e && typeof e.new_string === 'string' ? e.new_string : '')).join('\n');
+  }
   try {
     return fs.readFileSync(filePath, 'utf8').slice(0, 20000);
   } catch {
@@ -96,44 +125,53 @@ function readStdin() {
   }
 }
 
-try {
-  const payload = JSON.parse(readStdin() || '{}');
-  const filePath = payload && payload.tool_input && payload.tool_input.file_path;
-  const projectDir = String((payload && payload.cwd) || process.cwd());
-  const area = areaFor(filePath, readContent(payload, filePath));
+function main() {
+  try {
+    const payload = JSON.parse(readStdin() || '{}');
+    const filePath = payload && payload.tool_input && payload.tool_input.file_path;
+    const projectDir = String((payload && payload.cwd) || process.cwd());
+    const area = areaFor(filePath, readContent(payload, filePath));
 
-  if (area) {
-    const digest = digestFor(area, projectDir);
-    if (digest) {
-      // Dedupe per session: 1 injection per area. State in temp — I/O failure here
-      // degrades to "inject again", never to "break the hook".
-      const sessionId = String((payload && payload.session_id) || 'nosession').replace(/[^\w-]/g, '');
-      const stateFile = path.join(os.tmpdir(), `guardrails-write-time-${sessionId}.json`);
-      let seen = [];
-      try {
-        seen = JSON.parse(fs.readFileSync(stateFile, 'utf8'));
-        if (!Array.isArray(seen)) seen = [];
-      } catch {
-        seen = [];
-      }
-      if (!seen.includes(area)) {
+    if (area) {
+      const digest = digestFor(area, projectDir);
+      if (digest) {
+        // Dedupe per session: 1 injection per area. State in temp — I/O failure here
+        // degrades to "inject again", never to "break the hook".
+        const sessionId = String((payload && payload.session_id) || 'nosession').replace(/[^\w-]/g, '');
+        const stateFile = path.join(os.tmpdir(), `guardrails-write-time-${sessionId}.json`);
+        let seen = [];
         try {
-          fs.writeFileSync(stateFile, JSON.stringify([...seen, area]));
+          seen = JSON.parse(fs.readFileSync(stateFile, 'utf8'));
+          if (!Array.isArray(seen)) seen = [];
         } catch {
-          // best-effort
+          seen = [];
         }
-        process.stdout.write(
-          JSON.stringify({
-            hookSpecificOutput: {
-              hookEventName: 'PostToolUse',
-              additionalContext: digest,
-            },
-          }),
-        );
+        if (!seen.includes(area)) {
+          try {
+            fs.writeFileSync(stateFile, JSON.stringify([...seen, area]));
+          } catch {
+            // best-effort
+          }
+          process.stdout.write(
+            JSON.stringify({
+              hookSpecificOutput: {
+                hookEventName: 'PostToolUse',
+                additionalContext: digest,
+              },
+            }),
+          );
+        }
       }
     }
+  } catch {
+    // best-effort: never disturbs the edit.
   }
-} catch {
-  // best-effort: never disturbs the edit.
+  process.exit(0);
 }
-process.exit(0);
+
+// Exported for tests; auto-run only when invoked directly as the hook.
+module.exports = { areaFor, readContent, digestFor };
+
+if (require.main === module) {
+  main();
+}
