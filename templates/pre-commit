@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+# guardrails pre-commit — runs the project's own check gate + a secret scan.
+# Installed by guardrails:init-guards. Edit the GATE command to match your project.
+set -euo pipefail
+
+# 1. Project gate: type-check + lint + tests. Replace with your real command.
+#    ts/next default:  npm run check   (or: npx tsc --noEmit && npm run lint && npm test)
+#    python default:   ruff check . && pytest -q
+GATE="${GUARDRAILS_GATE:-}"
+if [ -n "$GATE" ]; then
+  eval "$GATE"
+fi
+
+# 2. Secret scan on staged content (best-effort — skips if gitleaks absent).
+if command -v gitleaks >/dev/null 2>&1; then
+  gitleaks protect --staged --redact --no-banner
+fi
+
+exit 0

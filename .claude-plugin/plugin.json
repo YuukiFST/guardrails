@@ -1,0 +1,48 @@
+{
+  "name": "guardrails",
+  "description": "Write-time code quality: injects security/performance/architecture digests at the moment you edit, so code is right from commit 1 instead of fixed later by review.",
+  "version": "0.1.0",
+  "author": {
+    "name": "YuukiFST"
+  },
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/session-start.js\"",
+            "timeout": 5,
+            "statusMessage": "Loading guardrails..."
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/write-time-guard.js\"",
+            "timeout": 5,
+            "statusMessage": "Guardrails check..."
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash|PowerShell",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/block-no-verify.js\"",
+            "timeout": 5,
+            "statusMessage": "Guarding commit gate..."
+          }
+        ]
+      }
+    ]
+  }
+}

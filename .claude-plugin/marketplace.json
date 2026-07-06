@@ -1,0 +1,16 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "guardrails",
+  "description": "Write-time code quality guardrails for Claude Code. Distills review-skill knowledge into digests injected as you edit, plus per-stack lint gates and an invariant ledger.",
+  "owner": {
+    "name": "YuukiFST"
+  },
+  "plugins": [
+    {
+      "name": "guardrails",
+      "description": "Code right from commit 1: write-time digests, per-stack guards, invariant ledger. Portable, multi-stack.",
+      "source": "./",
+      "category": "quality"
+    }
+  ]
+}
