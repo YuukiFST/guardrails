@@ -11,6 +11,8 @@ Each line: rule — why. Reach for these when the path is hot or the input can g
 • Cache only with a key and an eviction bound — an unbounded memo is a leak; reach for a
   built-in LRU before a custom cache class.
 • Debounce/throttle high-frequency triggers (input, scroll, resize) — not a handler per event.
+• No synchronous I/O in an async handler (readFileSync, execSync, sync crypto/hashing) — it
+  blocks the event loop and stalls every concurrent request, not just this one.
 • Don't optimize on a guess — if it's not on a hot path or a growing input, ship the simple
   version; measure before adding a cache/index/pool.
 

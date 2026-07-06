@@ -1,4 +1,9 @@
-// guardrails · nextjs lint gate (flat config fragment)
+// guardrails · Tailwind color-token lint gate (flat config fragment)
+//
+// NOTE: this is a TAILWIND gate, not a Next-specific one — the color-token rules apply
+// to ANY Tailwind project (Next, Remix, Nuxt, SvelteKit, plain Vite). init-guards ships
+// it whenever `tailwindcss` is in deps, as guardrails.tailwind.eslint.mjs. The directory
+// name stays `nextjs/` for path stability.
 //
 // Extends the ts-node gate with a UI-token guard: bans hardcoded Tailwind palette
 // colors (bg-white/black, *-gray/slate/zinc/neutral/stone) that break dark mode.

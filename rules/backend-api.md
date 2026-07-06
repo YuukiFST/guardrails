@@ -24,6 +24,9 @@ project overlay (.guardrails/backend-api.md) names your real helpers.
   sensitive field to a client that doesn't render it.
 • Auth + rate limit on every endpoint that mutates or exposes data — an unauthenticated
   mutation or unbounded endpoint is a live hole.
+• Auth crypto hygiene — constant-time compare for secrets/tokens (not `===`), CSPRNG not
+  Math.random for tokens/ids, cookies HttpOnly+Secure+SameSite, no CORS wildcard with
+  credentials, idempotency key on money/critical mutations (a retried POST must not double-charge).
 
 Close: type-check + run the tests that cover this; a NEW mutation gets an IDOR/negative-
 scope test. Money/auth/integrity change → adversarial pass (try to REFUTE it).

@@ -10,12 +10,15 @@ frame; this fills in **this project's** specifics — which is what carries the 
 
 ## Steps
 
-1. **Run the scaffold** (idempotent — never clobbers existing files):
+1. **Run the scaffold** (idempotent — never clobbers existing files). This SKILL.md lives at
+   `<plugin-root>/skills/init-guards/SKILL.md`, so the script is next to it — resolve the plugin
+   root from this file's path and run:
    ```
-   node "${CLAUDE_PLUGIN_ROOT}/skills/init-guards/init-guards.js" .
+   node <plugin-root>/skills/init-guards/init-guards.js .
    ```
+   (If `${CLAUDE_PLUGIN_ROOT}` is set in your environment it also works; don't depend on it.)
    It detects the stack and creates `.guardrails/`: `GUARDRAILS.md` (ledger), overlay
-   stubs, `pre-commit`, and the stack lint fragment. It prints `{ stack, created, skipped }`.
+   stubs, `pre-commit`, and the stack lint fragment. It prints `{ stack, created, skipped, next_steps }`.
 
 2. **Wire the lint gate** — the fragment for the detected stack (see the printed
    `next_steps`). Confirm the linter runs clean on current code before committing the rule.

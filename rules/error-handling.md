@@ -16,6 +16,8 @@ Each line: rule — why. Project overlay names your logger & error types.
   but a silent failed cleanup leaves orphans nobody sees.
 • Handle partial failure explicitly in batch/parallel work — `allSettled` and report the losers;
   don't let one rejection drop the rest or hide which item failed.
+• Every external call has a timeout and bounded retries — no unbounded hang, no infinite retry
+  loop; retry with a cap + backoff, and release resources in finally/defer even on the error path.
 • Error messages to the user are actionable and leak nothing — no stack trace, secret, or SQL
   to the client; the detail goes to the log.
 • Every incident becomes a permanent sensor — a prod error or data drift gets a regression test
