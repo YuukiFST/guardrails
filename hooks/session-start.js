@@ -26,6 +26,7 @@ const BASE = [
   '   (reviewer → test → lint) → record the line in the ledger, same commit.',
   '• Every incident (prod error · data drift · owner course-correction) becomes a permanent sensor (test + ledger line).',
   '• New module / extract / split: deep modules (small interface, real implementation), deletion test, no cycles — see rules/architecture.md (skill design-module).',
+  '• Before closing a task, self-review the diff against the area digests you were given — the goal is that a review pass (/autoreview, /improve, /thermo-nuclear) finds NOTHING in the known classes.',
 ].join('\n');
 
 function readStdin() {
