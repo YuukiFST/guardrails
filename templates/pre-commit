@@ -1,17 +1,25 @@
 #!/usr/bin/env bash
 # guardrails pre-commit — runs the project's own check gate + a secret scan.
-# Installed by guardrails:init-guards. Edit the GATE command to match your project.
+# Installed by guardrails:init-guards. Edit GATE_DEFAULT to match your project.
 set -euo pipefail
 
-# 1. Project gate: type-check + lint + tests. Replace with your real command.
-#    ts/next default:  npm run check   (or: npx tsc --noEmit && npm run lint && npm test)
-#    python default:   ruff check . && pytest -q
-GATE="${GUARDRAILS_GATE:-}"
+# Project gate: type-check + lint + tests. init-guards fills GATE_DEFAULT for the
+# detected stack; the GUARDRAILS_GATE env var overrides it. An empty gate is NOT a
+# silent no-op — it warns to stderr (below) so "commit passed" never gets mistaken
+# for "the code was checked".
+#   ts/next default:  npx tsc --noEmit && npx eslint .
+#   python default:   ruff check . && pytest -q
+#   go default:       go vet ./... && go test ./...
+#   rust default:     cargo clippy -- -D warnings && cargo test
+GATE_DEFAULT=""
+GATE="${GUARDRAILS_GATE:-$GATE_DEFAULT}"
 if [ -n "$GATE" ]; then
   eval "$GATE"
+else
+  echo "guardrails: GATE not configured — set GUARDRAILS_GATE or edit GATE_DEFAULT in .guardrails/pre-commit (running secret scan only)" >&2
 fi
 
-# 2. Secret scan on staged content (best-effort — skips if gitleaks absent).
+# Secret scan on staged content (best-effort — skips if gitleaks absent).
 if command -v gitleaks >/dev/null 2>&1; then
   gitleaks protect --staged --redact --no-banner
 fi

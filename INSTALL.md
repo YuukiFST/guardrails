@@ -28,7 +28,10 @@ fragment). Then:
 - **Wire the lint gate** (ts/next): spread `.guardrails/guardrails*.eslint.mjs` into the
   project's `eslint.config`. Confirm `npx eslint` is clean before committing the rule.
 - **Wire the pre-commit**: set `git config core.hooksPath` to a dir containing the hook (or copy
-  `.guardrails/pre-commit` to `.git/hooks/pre-commit`) and set its `GATE` to your check command.
+  `.guardrails/pre-commit` to `.git/hooks/pre-commit`). init-guards pre-fills `GATE_DEFAULT` for
+  the detected stack; if it landed empty (generic stack), the hook **warns to stderr and runs the
+  secret scan only** — edit `GATE_DEFAULT` (or set `GUARDRAILS_GATE`) so a passing commit actually
+  means the code was checked.
 - **Fill the overlays**: edit `.guardrails/*.md` to name your real helpers (scope function,
   logger, ORM conventions, design tokens, test runner). This is what makes the digests strong.
 - **Fill the ledger coverage** in `.guardrails/GUARDRAILS.md`.

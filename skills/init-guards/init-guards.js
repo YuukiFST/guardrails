@@ -48,6 +48,33 @@ const OVERLAY_STUBS = {
     '# co-location convention for this project.\n',
 };
 
+// Default pre-commit GATE per detected stack — the command that kills the ledger
+// classes with the stack's native tools. Empty for generic (the template warns).
+const GATE_DEFAULTS = {
+  nextjs: 'npx tsc --noEmit && npx eslint .',
+  'ts-node': 'npx tsc --noEmit && npx eslint .',
+  node: 'npx eslint .',
+  python: 'ruff check . && pytest -q',
+  go: 'go vet ./... && go test ./...',
+  rust: 'cargo clippy -- -D warnings && cargo test',
+  generic: '',
+};
+
+/** Write the pre-commit from the template with GATE_DEFAULT filled for this stack. */
+function writePreCommit(templateSrc, dest, stack, created, skipped) {
+  if (fs.existsSync(dest)) {
+    skipped.push(path.basename(dest));
+    return;
+  }
+  const gate = GATE_DEFAULTS[stack] || '';
+  const tpl = fs.readFileSync(templateSrc, 'utf8');
+  // Escape for a double-quoted bash assignment (backslash, ", $, backtick).
+  const esc = gate.replace(/([\\"$`])/g, '\\$1');
+  const filled = tpl.replace(/^GATE_DEFAULT=""$/m, `GATE_DEFAULT="${esc}"`);
+  fs.writeFileSync(dest, filled);
+  created.push(path.basename(dest));
+}
+
 function copyIfAbsent(src, dest, created, skipped) {
   if (fs.existsSync(dest)) {
     skipped.push(path.basename(dest));
@@ -76,7 +103,7 @@ function main() {
   const skipped = [];
 
   copyIfAbsent(path.join(PLUGIN_ROOT, 'templates', 'GUARDRAILS.md'), path.join(dir, 'GUARDRAILS.md'), created, skipped);
-  copyIfAbsent(path.join(PLUGIN_ROOT, 'templates', 'pre-commit'), path.join(dir, 'pre-commit'), created, skipped);
+  writePreCommit(path.join(PLUGIN_ROOT, 'templates', 'pre-commit'), path.join(dir, 'pre-commit'), info.stack, created, skipped);
   for (const [name, content] of Object.entries(OVERLAY_STUBS)) {
     writeIfAbsent(path.join(dir, name), content, created, skipped);
   }
